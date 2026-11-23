@@ -297,118 +297,70 @@ def create_nx_graph(df: pd.DataFrame, cl:int) -> nx.Graph:
     takes the dataframe df, and creates the undirected graph
     from the source and target columns for each row.
     """
-    g = nx.Graph() # dc['paper_cluster'] == cl
+    g = nx.Graph()
     dc = df[df['paper_cluster'] == cl]
-    author_counts = dc['paper_author_id'].tolist()
-    author_counts_dict = {c:author_counts.count(c) for c in author_counts}
-    affiliation_counts = dc['id'].tolist()
-    affiliation_counts_dict = {c:affiliation_counts.count(c) for c in affiliation_counts}
-    source_counts = dc['source'].tolist()
-    source_counts_dict = {c:source_counts.count(c) for c in source_counts}
-    funder_counts = [x for row in dc['funder_list'].tolist() for x in row]
-    funder_counts_dict = {c:funder_counts.count(c) for c in funder_counts}
-    for index, row in df[df['paper_cluster'] == cl].iterrows():
-        g.add_node(row['paper_id'], group='work', title=row['paper_title'])
-        g.add_node(row['paper_author_id'], title=row['paper_author_display_name'],
-                   group='author',value = author_counts_dict[row['paper_author_id']])
-        try:
-            g.add_node(row['id'], group='affiliation',
-                   title=row['display_name'] + '\n' + row['country_code'],
-                  value = affiliation_counts_dict[row['id']])
-        except:
-            g.add_node(row['id'], group='affiliation',
-                   title=row['display_name'],
-                  value = affiliation_counts_dict[row['id']]) 
-        if row['source']:
-            g.add_node(row['source'], group=row['source_type'],
-                      title=row['source'] + ' :\n ' + row['source_type'],
-                      value=source_counts_dict[row['source']])
-            g.add_edge(
-                row['paper_id'],
-                row['source'],
-            #    title=row['paper_title'] + ' :\n ' + str(row['paper_publication_date']) +  \
-            #    ' :\n' + row['source'] + ' :\n ' + \
-            #    row['source_type'],
-              #  weight = df[(df['paper_id'] == row['paper_id']) & \
-              #              (df['source'] == row['source'])]['paper_cluster_score'].sum()
-               # weight = row['paper_cluster_score']
-            )
-            g.add_edge(
-                row['paper_author_id'],
-                row['source'],
-            #    title=row['paper_author_display_name'] + ':\n' + row['source'],
-             #   weight = df[(df['paper_author_id'] == row['paper_author_id']) & \
-              #              (df['source'] == row['source'])]['paper_cluster_score'].sum()
-               # weight = row['paper_cluster_score']
-            )
-            g.add_edge(
-                row['id'],
-                row['source'],
-             #   title=row['display_name'] + ':\n' + row['source']
-            )
-        if len(row['funder_list']) > 0:
-            for f in row['funder_list']:
-                g.add_node(f, group='funder',
-                          title=str(f),
-                          value=funder_counts_dict[f])
-                g.add_edge(
-                       row['paper_id'],
-                       f,
-                  #     title=row['paper_title'] + ':\n ' +  str(row['paper_publication_date']) + \
-                  #     ' :\n' + str(f),
-                  #  weight = row['paper_cluster_score']
-                   )
-                g.add_edge(
-                       f,
-                       row['paper_author_id'],
-                    #   title=row['paper_author_display_name'] + ' :\n ' + \
-                  #     str(f),
-                  #  weight = row['paper_cluster_score']
-                       
-                   )
-                g.add_edge(
-                       f,
-                       row['id'],
-                  #     title=row['display_name'] + '\n' + row['country_code'] + ' :\n ' + \
-                   #    str(f)  ,
-                  #  weight = row['paper_cluster_score']
-                   )  
-                if row["source"]:
-                    g.add_edge(
-                        f,
-                        row["source"],
-                   #     title=row["source"] + ' :\n' + str(f),
-                     #   weight = row['paper_cluster_score']
-                    )
-        g.nodes[row['paper_id']]['title'] = (
-            row['paper_title'] + ' :\n ' + str(row['paper_publication_date'] + ':\n' + 
-            '\n'.join(kw_dict[row['paper_id']]))
-        )
-        g.nodes[row['paper_author_id']]['title'] = (
-            row['paper_author_display_name']
-        )
-        g.add_edge(
-            row['paper_id'],
-            row['paper_author_id'],
-      #  title=row['paper_title'] + ' :\n ' + row['paper_author_display_name'] + ' :\n ' + \
-      #      row['paper_raw_affiliation_string'],
-         #   weight = row['paper_cluster_score']
-        )
-        g.add_edge(
-            row['paper_author_id'],
-            row['id'],
-       #     title=row['paper_author_display_name'] + ' :\n ' + \
-       #     row['display_name'] + ' :\n ' + row['country_code'],
-          #  weight = row['paper_cluster_score']
-        )
-        g.add_edge(
-            row['paper_id'],
-            row['id'],
-        #    title=row['paper_title'] + ' :\n ' + str(row['paper_publication_date']) + ':\n' + 
-        #    row['display_name'] + ' :\n ' + row['country_code'],
-         #   weight = row['paper_cluster_score']
-        )
-        
+
+    def _s(v):
+        """the value if it is a non-empty string, else None (missing values
+        arrive as None or NaN, and NaN is truthy)."""
+        return v if isinstance(v, str) and v else None
+
+    author_counts_dict = dc['paper_author_id'].value_counts().to_dict()
+    affiliation_counts_dict = dc['id'].value_counts().to_dict()
+    source_counts_dict = dc['source'].value_counts().to_dict()
+    funder_counts_dict = pd.Series(
+        [x for row in dc['funder_list'] if isinstance(row, list) for x in row],
+        dtype=object).value_counts().to_dict()
+
+    for index, row in dc.iterrows():
+        paper = _s(row['paper_id'])
+        if paper is None:
+            continue
+        author = _s(row['paper_author_id'])
+        affil = _s(row['id'])
+        source = _s(row['source'])
+        funders = [f for f in row['funder_list'] if _s(f)] \
+            if isinstance(row['funder_list'], list) else []
+
+        g.add_node(paper, group='work',
+                   title=(_s(row['paper_title']) or 'untitled') + ' :\n '
+                   + str(row['paper_publication_date']) + ':\n'
+                   + '\n'.join(kw_dict.get(paper, [])))
+        if author:
+            g.add_node(author, group='author',
+                       title=_s(row['paper_author_display_name']) or author,
+                       value=author_counts_dict[author])
+            g.add_edge(paper, author)
+        if affil:
+            affil_title = _s(row['display_name']) or affil
+            if _s(row['country_code']):
+                affil_title += '\n' + row['country_code']
+            g.add_node(affil, group='affiliation', title=affil_title,
+                       value=affiliation_counts_dict[affil])
+            g.add_edge(paper, affil)
+            if author:
+                g.add_edge(author, affil)
+        if source:
+            source_type = _s(row['source_type']) or 'source'
+            g.add_node(source, group=source_type,
+                       title=source + ' :\n ' + source_type,
+                       value=source_counts_dict[source])
+            g.add_edge(paper, source)
+            if author:
+                g.add_edge(author, source)
+            if affil:
+                g.add_edge(affil, source)
+        for f in funders:
+            g.add_node(f, group='funder', title=f,
+                       value=funder_counts_dict[f])
+            g.add_edge(paper, f)
+            if author:
+                g.add_edge(f, author)
+            if affil:
+                g.add_edge(f, affil)
+            if source:
+                g.add_edge(f, source)
+
     g_ig = ig.Graph.from_networkx(g) # assign 'x', and 'y' to g before returning
     #layout = g_ig.layout_auto()
     #layout = g_ig.layout_davidson_harel()
@@ -490,19 +442,17 @@ const options = {
   }
     """
     )
-    #h.show_buttons(filter_=['physics'])
-  #  h.barnes_hut()
-    #h.repulsion()
-    try:
-        path = './tmp'
-        h.save_graph(f"{path}/{filename}")
-        HtmlFile = open(f"{path}/{filename}","r",
-                        encoding='utf-8')
-    except:
-        h.save_graph(f"{filename}")
-        HtmlFile = open(f"{filename}", "r",
-                        encoding="utf-8")
-    return HtmlFile
+    return h.generate_html(notebook=False)
+
+
+@st.cache_data(show_spinner="Building coauthorship graph…")
+def get_coauthorship_html(cl: int) -> str:
+    """
+    the coauthorship graph for topic cl as a standalone html string.
+    Cached per topic: st.tabs renders every tab body on every rerun, so
+    without the cache the graph would be rebuilt on each interaction.
+    """
+    return create_pyvis_html(cl)
 
 
 #htmlfile = create_pyvis_html()
@@ -907,11 +857,7 @@ dvjournals, kwjournals = get_journals_cluster_sort(dftriple, selected_cluster)
 
 dvconferences, kwconferences = get_conferences_cluster_sort(dftriple, selected_cluster)
 
-# DISABLED: create_pyvis_html rebuilds the full PyVis coauthorship graph on
-# EVERY rerun (st.tabs renders all tab bodies eagerly, not just the active one),
-# which hangs the app for large clusters. Re-enable only behind an explicit
-# button if needed.
-# htmlfile = create_pyvis_html(selected_cluster)
+coauthorship_html = get_coauthorship_html(int(selected_cluster))
 
 dftime = get_time_series(dfinfo, selected_cluster)
 
@@ -1002,11 +948,9 @@ with tab5:
 
 with tab6:
     st.write("Coauthorship Graph (Papers and Authors)")
-    st.info("Coauthorship graph temporarily disabled for performance — it "
-            "rebuilt on every interaction and stalled large topics. Use the "
-            "**Download Selected Papers** button above to inspect coauthorship "
-            "offline.")
-    # components.html(htmlfile.read(), height=1100)
+    st.write("Nodes are papers, authors, affiliations, sources and funders; "
+             "drag to pan, scroll to zoom, click a node to highlight its neighbours.")
+    components.html(coauthorship_html, height=1100)
     
 with tab7:
     st.write("Country-Country Collaborations")
