@@ -40,6 +40,17 @@ after 2000, all countries, deduplicated by paper id:
 
 The exact strings are in `QUERIES` in the notebook.
 
+The short Boolean terms admit off-topic papers (geological "formations", crop
+imaging, wildfire detection), so each paper is scored by embedding similarity to
+a few sentences describing the subject and those below `MIN_RELEVANCE` are
+removed before clustering. Current build: 2,599 papers matched, 2,216 have an
+abstract, 1,953 pass the relevance filter, 20 topics.
+
+Clustering differs from `techintel-jamming`: HDBSCAN uses `leaf` selection
+(the jamming settings merge this corpus into one cluster), and papers HDBSCAN
+leaves unassigned take the topic of their nearest neighbours on the map with a
+low score, so they stay visible without swaying the per-topic rankings.
+
 ## Data pipeline
 
 Two steps, in two environments:
