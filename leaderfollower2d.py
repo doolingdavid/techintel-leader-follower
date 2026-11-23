@@ -551,6 +551,9 @@ def get_fig_asat():
     fig_papers = px.scatter(dfinfo[dfinfo.cluster != -1],
                            x='x',y='y',
                     color='cluster_',
+                    # plotly switches to WebGL above 1,000 points; force SVG so
+                    # the map also renders in browsers with WebGL unavailable
+                    render_mode='svg',
                         hover_data = ['title','cluster',
                                       'publication_date'])
                      #     hover_data=['title','x','y',
